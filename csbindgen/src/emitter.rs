@@ -112,48 +112,13 @@ pub fn emit_csharp(
     }
 
     let mut method_list_string = String::new();
+    let mut delegate_list = Vec::new();
     for item in methods {
         let mut method_name = &item.method_name;
         let method_name_temp: String;
         if method_prefix.is_empty() {
             method_name_temp = escape_csharp_name(method_name);
             method_name = &method_name_temp;
-        }
-
-        if let Some(x) = &item.return_type {
-            if let Some(delegate_method) = build_method_delegate_if_required(
-                x,
-                options,
-                aliases,
-                method_name,
-                &"return".to_string(),
-            ) {
-                method_list_string.push_str(
-                    "        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]\n"
-                        .to_string()
-                        .as_str(),
-                );
-                method_list_string
-                    .push_str(format!("        {accessibility} {delegate_method};\n\n").as_str());
-            }
-        }
-
-        for p in item.parameters.iter() {
-            if let Some(delegate_method) = build_method_delegate_if_required(
-                &p.rust_type,
-                options,
-                aliases,
-                method_name,
-                &p.name,
-            ) {
-                method_list_string.push_str(
-                    "        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]\n"
-                        .to_string()
-                        .as_str(),
-                );
-                method_list_string
-                    .push_str(format!("        {accessibility} {delegate_method};\n\n").as_str());
-            }
         }
 
         let entry_point = match &item.export_naming {
@@ -166,9 +131,14 @@ pub fn emit_csharp(
             x => format!("{x}{entry_point}"),
         };
         let return_type = match &item.return_type {
-            Some(x) => {
-                x.to_csharp_string(options, aliases, false, method_name, &"return".to_string())
-            }
+            Some(x) => x.to_csharp_string(
+                options,
+                aliases,
+                &mut delegate_list,
+                false,
+                method_name,
+                &"return".to_string(),
+            ),
             None => "void".to_string(),
         };
 
@@ -176,9 +146,14 @@ pub fn emit_csharp(
             .parameters
             .iter()
             .map(|p| {
-                let mut type_name =
-                    p.rust_type
-                        .to_csharp_string(options, aliases, false, method_name, &p.name);
+                let mut type_name = p.rust_type.to_csharp_string(
+                    options,
+                    aliases,
+                    &mut delegate_list,
+                    false,
+                    method_name,
+                    &p.name,
+                );
                 if type_name == "bool" {
                     type_name = "[MarshalAs(UnmanagedType.U1)] bool".to_string();
                 }
@@ -233,6 +208,7 @@ pub fn emit_csharp(
             let type_name = field.rust_type.to_csharp_string(
                 options,
                 aliases,
+                &mut delegate_list,
                 true,
                 &"".to_string(),
                 &"".to_string(),
@@ -323,6 +299,7 @@ pub fn emit_csharp(
         let mut type_name = item.rust_type.to_csharp_string(
             options,
             aliases,
+            &mut delegate_list,
             false,
             &"".to_string(),
             &"".to_string(),
@@ -365,6 +342,15 @@ pub fn emit_csharp(
         }
     }
 
+    let mut delegate_list_string = String::new();
+    delegate_list.sort();
+    delegate_list.dedup();
+    for delegate in delegate_list {
+        delegate_list_string
+            .push_str("        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]\n");
+        delegate_list_string.push_str(format!("        {accessibility} {delegate};\n\n").as_str());
+    }
+
     // use empty string if the generated class is empty.
     let class_string = if method_list_string.is_empty() && const_string.is_empty() {
         String::new()
@@ -375,6 +361,8 @@ pub fn emit_csharp(
 {dll_name}
 
 {const_string}
+
+{delegate_list_string}
 
 {method_list_string}
     }}"

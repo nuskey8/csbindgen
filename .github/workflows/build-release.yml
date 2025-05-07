@@ -16,7 +16,7 @@ jobs:
   build-and-push-rust:
     permissions:
       contents: write
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Load secrets
@@ -50,7 +50,7 @@ jobs:
     needs: [build-and-push-rust]
     permissions:
       contents: read
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Load secrets

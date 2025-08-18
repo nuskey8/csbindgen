@@ -121,8 +121,7 @@ fn parse_method(item: FnItem, options: &BindgenOptions) -> Option<ExternMethod> 
     if !is_foreign_item {
         let found = attrs
             .iter()
-            .map(|attr| parse_method_attribute(attr))
-            .flatten()
+            .filter_map(|attr| parse_method_attribute(attr))
             .next();
 
         if let Some(x) = found {

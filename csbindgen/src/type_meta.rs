@@ -1,4 +1,5 @@
 use crate::{alias_map::AliasMap, builder::BindgenOptions};
+use std::collections::HashMap;
 
 pub fn escape_csharp_name(str: &str) -> String {
     match str {
@@ -201,6 +202,7 @@ impl RustType {
         &self,
         options: &BindgenOptions,
         alias_map: &AliasMap,
+        delegate_list: &mut Vec<String>,
         emit_from_struct: bool,
         method_name: &String,
         parameter_name: &String,
@@ -281,6 +283,7 @@ impl RustType {
             use_type.to_csharp_string(
                 options,
                 alias_map,
+                delegate_list,
                 emit_from_struct,
                 method_name,
                 parameter_name,
@@ -320,6 +323,7 @@ impl RustType {
                         sb.push_str(&p.rust_type.to_csharp_string(
                             options,
                             alias_map,
+                            delegate_list,
                             emit_from_struct,
                             method_name,
                             parameter_name,
@@ -331,6 +335,7 @@ impl RustType {
                             sb.push_str(&x.to_csharp_string(
                                 options,
                                 alias_map,
+                                delegate_list,
                                 emit_from_struct,
                                 method_name,
                                 parameter_name,
@@ -342,6 +347,14 @@ impl RustType {
                     };
                     sb.push('>');
                 } else {
+                    build_method_delegate(
+                        self,
+                        options,
+                        alias_map,
+                        delegate_list,
+                        method_name,
+                        parameter_name,
+                    );
                     sb.push_str(build_method_delegate_name(method_name, parameter_name).as_str());
                 }
             }
@@ -352,6 +365,7 @@ impl RustType {
                         .to_csharp_string(
                             options,
                             alias_map,
+                            delegate_list,
                             emit_from_struct,
                             method_name,
                             parameter_name,
@@ -365,6 +379,7 @@ impl RustType {
                     rust_type: &RustType,
                     options: &BindgenOptions,
                     alias_map: &AliasMap,
+                    delegate_list: &mut Vec<String>,
                     emit_from_struct: bool,
                     method_name: &String,
                     parameter_name: &String,
@@ -378,6 +393,7 @@ impl RustType {
                                     .to_csharp_string(
                                         options,
                                         alias_map,
+                                        delegate_list,
                                         emit_from_struct,
                                         method_name,
                                         parameter_name,
@@ -408,6 +424,7 @@ impl RustType {
                         &use_type,
                         options,
                         alias_map,
+                        delegate_list,
                         emit_from_struct,
                         method_name,
                         parameter_name,
@@ -424,6 +441,7 @@ impl RustType {
                     self,
                     options,
                     alias_map,
+                    delegate_list,
                     emit_from_struct,
                     method_name,
                     parameter_name,
@@ -439,69 +457,67 @@ impl RustType {
     }
 }
 
-pub fn build_method_delegate_if_required(
+pub fn build_method_delegate(
     me: &RustType,
     options: &BindgenOptions,
     alias_map: &AliasMap,
+    delegate_list: &mut Vec<String>,
     method_name: &String,
     parameter_name: &String,
-) -> Option<String> {
+) {
     let emit_from_struct = false;
 
     match &me.type_kind {
         TypeKind::Function(parameters, return_type) => {
-            if emit_from_struct && !options.csharp_use_function_pointer {
-                None
-            } else if options.csharp_use_function_pointer {
-                None
-            } else {
-                let return_type_name = match return_type {
-                    Some(x) => x.to_csharp_string(
+            let return_type_name = match return_type {
+                Some(x) => x.to_csharp_string(
+                    options,
+                    alias_map,
+                    delegate_list,
+                    emit_from_struct,
+                    &build_method_delegate_name(method_name, parameter_name),
+                    &x.type_name,
+                ),
+                None => "void".to_string(),
+            };
+
+            let joined_param = parameters
+                .iter()
+                .enumerate()
+                .map(|(index, p)| {
+                    let cs = p.rust_type.to_csharp_string(
                         options,
                         alias_map,
+                        delegate_list,
                         emit_from_struct,
-                        method_name,
-                        parameter_name,
-                    ),
-                    None => "void".to_string(),
-                };
+                        &build_method_delegate_name(method_name, parameter_name),
+                        &p.name,
+                    );
+                    let parameter_name = if p.name.is_empty() {
+                        format!("arg{}", index + 1)
+                    } else {
+                        p.name.clone()
+                    };
 
-                let joined_param = parameters
-                    .iter()
-                    .enumerate()
-                    .map(|(index, p)| {
-                        let cs = p.rust_type.to_csharp_string(
-                            options,
-                            alias_map,
-                            emit_from_struct,
-                            method_name,
-                            parameter_name,
-                        );
-                        let parameter_name = if p.name.is_empty() {
-                            format!("arg{}", index + 1)
-                        } else {
-                            p.name.clone()
-                        };
+                    format!("{} {}", cs, escape_csharp_name(parameter_name.as_str()))
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
 
-                        format!("{} {}", cs, escape_csharp_name(parameter_name.as_str()))
-                    })
-                    .collect::<Vec<_>>()
-                    .join(", ");
-
-                let delegate_name = build_method_delegate_name(method_name, parameter_name);
-                let delegate_code =
-                    format!("delegate {return_type_name} {delegate_name}({joined_param})");
-                Some(delegate_code)
-            }
+            let delegate_name = build_method_delegate_name(method_name, parameter_name);
+            let delegate_code =
+                format!("delegate {return_type_name} {delegate_name}({joined_param})");
+            delegate_list.push(delegate_code);
         }
-        TypeKind::Option(inner) => build_method_delegate_if_required(
+        TypeKind::Option(inner) => build_method_delegate(
             inner,
             options,
             alias_map,
+            delegate_list,
             method_name,
             parameter_name,
         ),
-        _ => None,
+        _ => (),
     }
 }
 

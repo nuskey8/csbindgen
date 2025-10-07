@@ -119,12 +119,16 @@ fn main() -> Result<(), Box<dyn Error>> {
     // using bindgen, generate binding code
    bindgen::Builder::default()
         .header("c/lz4/lz4.h")
+        .default_enum_style(bindgen::EnumVariation::Rust {
+            non_exhaustive: false,
+        })
         .generate()?
         .write_to_file("lz4.rs")?;
         
     // csbindgen code, generate C# dll import
     csbindgen::Builder::default()
         .input_bindgen_file("lz4.rs") // read from bindgen generated code
+     // .csharp_generate_const_filter(|x| x.starts_with("LZ4_")) // use csharp_generate_const_filter if you want to generate const
         .generate_csharp_file("../dotnet/NativeMethods.lz4.g.cs")?;
 
     Ok(())
@@ -132,6 +136,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 ```
 
 In this case, you won't use the Rust binary built. Instead, build the C/C++ library separately using make, cmake, or other tools, and place it accordingly. When targeting OSS libraries, they typically come with make/cmake configurations, so it's best to follow their build procedures to generate the library.
+
+bindgen's `default_enum_style` generates consts. When handling in C#, it would be more practical to generate them as enums. Also, csbindgen does not generate consts by default. By enabling `csharp_generate_const_filter`, consts will be generated on the C# side.
+
+Additionally, types and enums that exist in the input file are all trimmed and not generated if they are not used in method definitions. If you want to generate types or enums on the C# side, you explicitly specify them using `always_included_types`. For example, `.always_included_types(["ZL_StandardGraphID", "ZL_StandardNodeID"])`.
 
 #### C to Rust to C#
 
@@ -144,6 +152,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     // using bindgen, generate binding code
     bindgen::Builder::default()
         .header("c/lz4/lz4.h")
+        .default_enum_style(bindgen::EnumVariation::Rust {
+            non_exhaustive: false,
+        })
         .generate().unwrap()
         .write_to_file("lz4.rs")?;
 
@@ -156,6 +167,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .rust_file_header("use super::lz4::*;")     // import bindgen generated modules(struct/method)
         .csharp_entry_point_prefix("csbindgen_") // adjust same signature of rust method and C# EntryPoint
         .csharp_dll_name("liblz4")
+     // .csharp_generate_const_filter(|x| x.starts_with("LZ4_")) // use csharp_generate_const_filter if you want to generate const
         .generate_to_file("lz4_ffi.rs", "../dotnet/NativeMethods.lz4.g.cs")?;
 }
 ```
@@ -235,6 +247,7 @@ csbindgen::Builder::default()
         "FfiConfiguration" => "Configuration".into(),
         _ => x,
     })
+    .always_included_types(["ZL_StandardGraphID", "ZL_StandardNodeID"])` // optional, default: []
     .generate_csharp_file("../dotnet-sandbox/NativeMethods.cs")     // required
     .unwrap();
 ```
@@ -280,6 +293,8 @@ csbindgen::Builder::default()
 ```
 
 also `csharp_imported_namespaces` can call multiple times.
+
+`always_included_types` is optional. Types and enums that exist in the input file are all trimmed and not generated if they are not used in method definitions. If set name, do not trim and generate type to C#.
 
 ### Unity Callback
 
@@ -339,6 +354,7 @@ csbindgen::Builder::default()
         "FfiConfiguration" => "Configuration".into(),
         _ => x,
     })
+    .always_included_types(["ZL_StandardGraphID", "ZL_StandardNodeID"])` // optional, default: []
     .csharp_file_header("#if !UNITY_WEBGL")       // optional, default: ""
     .csharp_file_footer("#endif")                 // optional, default: ""
     .generate_to_file("src/lz4_ffi.rs", "../dotnet-sandbox/lz4_bindgen.cs") // for C to Rust to C#, if C to C#, use generate_csharp_file instead.

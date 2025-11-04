@@ -76,6 +76,29 @@ fn parse_method(item: FnItem, options: &BindgenOptions) -> Option<ExternMethod> 
     };
 
     let method_name = sig.ident.to_string();
+    let call_conv = if let Some(abi) = sig.abi.map(|abi| abi.name).flatten() {
+        let abi_str = &abi.value();
+        if abi_str.contains("system") {
+            // For i686-pc-windows-* (32-bit binaries) the default calling convention is stdcall, unlike everywhere else.
+            // See https://doc.rust-lang.org/reference/items/external-blocks.html#abi for a list of possible ABIs and what they translate to.
+            if cfg!(all(target_arch = "x86", windows)) {"StdCall"}
+            else {"Cdecl"}
+        }
+        else if abi_str.contains("stdcall") {"StdCall"}
+        else if abi_str.contains("thiscall") {"ThisCall"}
+        else if abi_str.contains("C") || abi_str.contains("cdecl") || abi_str.contains("win64") || abi_str.contains("sysv64") || abi_str.contains("aapcs") {"Cdecl"}
+        else {
+            // This is only ever hit for the `Rust`, `fastcall`, and `efiapi` calling conventions, none of which are supported by C# (as of .NET 9)
+            // https://learn.microsoft.com/en-us/dotnet/api/system.runtime.compilerservices.callconvfastcall?view=net-9.0
+            // https://learn.microsoft.com/en-us/dotnet/standard/native-interop/calling-conventions#platform-default-calling-convention
+            // https://learn.microsoft.com/en-us/dotnet/api/system.runtime.interopservices.callingconvention?view=net-9.0
+            eprintln!("C# support for calling conventions is limited. Please stick to any of the supported options for interop:");
+            eprintln!("`cdecl` for `Cdecl`, `stdcall` for `StdCall`, `thiscall` for `ThisCall`, `C` for the compiler's default (most likely `Cdecl`), `system` for automatic selection, or your platform-specific target.");
+            panic!("Unsupported calling convention requested!");
+        }
+    } else {
+        "Cdecl"
+    }.to_string();
 
     let mut parameters: Vec<Parameter> = Vec::new();
     let mut return_type: Option<RustType> = None;
@@ -143,6 +166,7 @@ fn parse_method(item: FnItem, options: &BindgenOptions) -> Option<ExternMethod> 
             parameters,
             return_type,
             doc_comment: gather_docs(&attrs),
+            call_conv,
         });
     }
 

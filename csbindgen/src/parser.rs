@@ -88,7 +88,21 @@ fn parse_method(item: FnItem, options: &BindgenOptions) -> Option<ExternMethod> 
             else {"Cdecl"}
         }
         else if abi_str.contains("stdcall") {"StdCall"}
-        else if abi_str.contains("thiscall") {"ThisCall"}
+        else if abi_str.contains("thiscall") {
+            if !is_x86_windows {
+                eprintln!("ThisCall is only allowed on 32-bit MSVC as it's the 32-bit member function calling convention. Consider using \"system\" instead.");
+                panic!("Cannot emit `thiscall` code in Rust for a non-x86 target.");
+            }
+            else {"ThisCall"}
+        }
+        else if abi_str.contains("win64") && (std::env::var("CARGO_CFG_TARGET_OS").is_ok_and(|v| v != "windows") || std::env::var("CARGO_CFG_TARGET_ARCH").is_ok_and(|v| v != "x86_64")) {
+            eprintln!("win64 is an AMD64-only calling convention. Consider using \"system\" instead.");
+            panic!("Cannot emit `win64` code in Rust for a non-AMD64-windows target.");
+        }
+        else if abi_str.contains("sysv64") && (std::env::var("CARGO_CFG_TARGET_OS").is_ok_and(|v| v == "windows") || std::env::var("CARGO_CFG_TARGET_ARCH").is_ok_and(|v| v != "x86_64")) {
+            eprintln!("sysv64 is the calling convention for AMD64 non-windows, consider using \"system\" instead.");
+            panic!("Cannot emit `sysv64` on non-AMD64 and/or windows target.");
+        }
         else if abi_str.contains("C") || abi_str.contains("cdecl") || abi_str.contains("win64") || abi_str.contains("sysv64") || abi_str.contains("aapcs") {"Cdecl"}
         else {
             // This is only ever hit for the `Rust`, `fastcall`, and `efiapi` calling conventions, none of which are supported by C# (as of .NET 9)
@@ -97,7 +111,7 @@ fn parse_method(item: FnItem, options: &BindgenOptions) -> Option<ExternMethod> 
             // https://learn.microsoft.com/en-us/dotnet/api/system.runtime.interopservices.callingconvention?view=net-9.0
             eprintln!("C# support for calling conventions is limited. Please stick to any of the supported options for interop:");
             eprintln!("`cdecl` for `Cdecl`, `stdcall` for `StdCall`, `thiscall` for `ThisCall`, `C` for the compiler's default (most likely `Cdecl`), `system` for automatic selection, or your platform-specific target.");
-            panic!("Unsupported calling convention requested!");
+            panic!("Unsupported calling convention requested! .NET interop does not support {abi_str}, please consider using \"system\" for the extern ABI.");
         }
     } else {
         "Cdecl"

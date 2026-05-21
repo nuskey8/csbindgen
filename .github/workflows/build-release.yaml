@@ -13,37 +13,37 @@ on:
         type: boolean
 
 jobs:
-  build-and-push-rust:
-    permissions:
-      contents: write
-      id-token: write # required for crates.io publish
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    steps:
-      - uses: Cysharp/Actions/.github/actions/checkout@main
-      - uses: rust-lang/crates-io-auth-action@b7e9a28eded4986ec6b1fa40eeee8f8f165559ec # v1.0.3
-        id: auth
-      - run: cargo build --verbose
-      - run: cargo test update_package_version -- ${{ inputs.tag }} --nocapture
-      - run: |
-          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git commit -m "Update cargo.toml version to ${{ inputs.tag }}" -a
-      - run: cargo publish --manifest-path csbindgen/Cargo.toml
-        if: ${{ !inputs.dry-run }}
-        env:
-          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-      - run: git tag ${{ inputs.tag }}
-      - name: Push changes
-        if: ${{ !inputs.dry-run }}
-        uses: ad-m/github-push-action@77c5b412c50b723d2a4fbc6d71fb5723bcd439aa
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          branch: ${{ github.ref }}
-          tags: true
+  # build-and-push-rust:
+  #   permissions:
+  #     contents: write
+  #     id-token: write # required for crates.io publish
+  #   runs-on: ubuntu-24.04
+  #   timeout-minutes: 10
+  #   steps:
+  #     - uses: Cysharp/Actions/.github/actions/checkout@main
+  #     - uses: rust-lang/crates-io-auth-action@b7e9a28eded4986ec6b1fa40eeee8f8f165559ec # v1.0.3
+  #       id: auth
+  #     - run: cargo build --verbose
+  #     - run: cargo test update_package_version -- ${{ inputs.tag }} --nocapture
+  #     - run: |
+  #         git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+  #         git config --local user.name "github-actions[bot]"
+  #         git commit -m "Update cargo.toml version to ${{ inputs.tag }}" -a
+  #     - run: cargo publish --manifest-path csbindgen/Cargo.toml
+  #       if: ${{ !inputs.dry-run }}
+  #       env:
+  #         CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+  #     - run: git tag ${{ inputs.tag }}
+  #     - name: Push changes
+  #       if: ${{ !inputs.dry-run }}
+  #       uses: ad-m/github-push-action@77c5b412c50b723d2a4fbc6d71fb5723bcd439aa
+  #       with:
+  #         github_token: ${{ secrets.GITHUB_TOKEN }}
+  #         branch: ${{ github.ref }}
+  #         tags: true
 
   build-dotnet:
-    needs: [build-and-push-rust]
+    # needs: [build-and-push-rust]
     permissions:
       contents: read
       id-token: write # required for NuGet Trusted Publish
@@ -72,7 +72,8 @@ jobs:
           NUGET_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}
 
   create-release:
-    needs: [build-dotnet, build-and-push-rust]
+    # needs: [build-dotnet, build-and-push-rust]
+    needs: [build-dotnet]
     permissions:
       contents: write
       id-token: write # required for NuGet Trusted Publish

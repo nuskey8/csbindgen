@@ -382,32 +382,7 @@ pub fn collect_const(
             if filter(const_name.as_str()) {
                 let t = parse_type(&ct.ty);
 
-                if let syn::Expr::Lit(lit_expr) = &*ct.expr {
-                    let value = match &lit_expr.lit {
-                        syn::Lit::Str(s) => {
-                            format!("\"{}\"", s.value())
-                        }
-                        syn::Lit::ByteStr(bs) => {
-                            format!("{:?}", bs.value())
-                        }
-                        syn::Lit::Byte(b) => {
-                            format!("{}", b.value())
-                        }
-                        syn::Lit::Char(c) => {
-                            format!("'{}'", c.value())
-                        }
-                        syn::Lit::Int(i) => {
-                            format!("{}", i.base10_parse::<i64>().unwrap())
-                        }
-                        syn::Lit::Float(f) => {
-                            format!("{}", f.base10_parse::<f64>().unwrap())
-                        }
-                        syn::Lit::Bool(b) => {
-                            format!("{}", b.value)
-                        }
-                        _ => String::new(),
-                    };
-
+                if let Some(value) = parse_const_value(&ct.expr) {
                     result.push(RustConst {
                         const_name,
                         rust_type: t,
@@ -418,6 +393,36 @@ pub fn collect_const(
             }
         }
     }
+}
+
+fn parse_const_value(expr: &syn::Expr) -> Option<String> {
+    if let syn::Expr::Lit(lit_expr) = expr {
+        return match &lit_expr.lit {
+            syn::Lit::Str(s) => Some(format!("\"{}\"", s.value())),
+            syn::Lit::ByteStr(bs) => Some(format!("{:?}", bs.value())),
+            syn::Lit::Byte(b) => Some(format!("{}", b.value())),
+            syn::Lit::Char(c) => Some(format!("'{}'", c.value())),
+            syn::Lit::Int(i) => Some(format!("{}", i.base10_parse::<i64>().unwrap())),
+            syn::Lit::Float(f) => Some(format!("{}", f.base10_parse::<f64>().unwrap())),
+            syn::Lit::Bool(b) => Some(format!("{}", b.value)),
+            _ => None,
+        };
+    }
+
+    if let syn::Expr::Unary(u) = expr {
+        if matches!(u.op, syn::UnOp::Neg(_)) {
+            return match &*u.expr {
+                syn::Expr::Lit(lit_expr) => match &lit_expr.lit {
+                    syn::Lit::Int(i) => Some(format!("-{}", i.base10_parse::<i64>().unwrap())),
+                    syn::Lit::Float(f) => Some(format!("-{}", f.base10_parse::<f64>().unwrap())),
+                    _ => None,
+                },
+                _ => None,
+            };
+        }
+    }
+
+    None
 }
 
 pub fn collect_enum(ast: &syn::File, result: &mut Vec<RustEnum>) {

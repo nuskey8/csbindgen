@@ -214,6 +214,53 @@ mod tests {
         fs::remove_file(generated_file_path).unwrap();
     }
 
+    #[test]
+    fn generates_negative_consts() {
+        let input_path = env::temp_dir().join(format!(
+            "csbindgen_negative_consts_{}.rs",
+            std::process::id()
+        ));
+        let output_path = env::temp_dir().join(format!(
+            "csbindgen_negative_consts_{}.cs",
+            std::process::id()
+        ));
+
+        fs::write(
+            &input_path,
+            r#"
+pub const NEGATIVE_INT: i32 = -1;
+pub const NEGATIVE_FLOAT: f32 = -1.5;
+pub const POSITIVE_INT: i32 = 2;
+"#,
+        )
+        .unwrap();
+
+        Builder::new()
+            .input_extern_file(input_path.to_str().unwrap())
+            .csharp_class_accessibility("public")
+            .csharp_generate_const_filter(|_| true)
+            .generate_csharp_file(&output_path)
+            .unwrap();
+
+        let csharp = fs::read_to_string(&output_path).unwrap();
+
+        fs::remove_file(input_path).unwrap();
+        fs::remove_file(output_path).unwrap();
+
+        assert!(
+            csharp.contains("public const int NEGATIVE_INT = -1;"),
+            "{csharp}"
+        );
+        assert!(
+            csharp.contains("public const float NEGATIVE_FLOAT = -1.5f;"),
+            "{csharp}"
+        );
+        assert!(
+            csharp.contains("public const int POSITIVE_INT = 2;"),
+            "{csharp}"
+        );
+    }
+
     // #[test]
     // fn test_emit_without_class() {
     //     let generated_file_path = "dotnet-sandbox/only_enums_and_structs_bindgen.cs";
